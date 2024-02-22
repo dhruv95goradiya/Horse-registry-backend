@@ -44,7 +44,7 @@ router.get('/horses/search', auth, async (req, res) => {
         { approvalStatus: 'approved' } // Filter by approved status
       ]
     })
-    .populate('owner', 'firstName lastName state country') // Populate owner field with specified fields
+    .populate('owner', 'firstName lastName state country ownerName') // Populate owner field with specified fields
     .skip(skip)
     .limit(itemsPerPage);
 
@@ -90,6 +90,7 @@ router.get('/horses', auth, async (req, res) => {
     // Query the database for approved horses owned by the member with pagination
     const count = await Horse.countDocuments({ owner: memberId, approvalStatus: 'approved' });
     const horses = await Horse.find({ owner: memberId, approvalStatus: 'approved' })
+                                .populate('owner', 'firstName lastName state country ownerName')
                                 .skip(skip)
                                 .limit(itemsPerPage);
 

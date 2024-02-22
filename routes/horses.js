@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
 // Initialize multer with storage configuration
 const upload = multer({ storage });
 
-// create or register horse with documents
+// create or register horse with documents '/api/horse'
 router.post('/', auth, upload.fields([{ name: 'registrationDocument', maxCount: 1 }, { name: 'dnaKitDocument', maxCount: 1 }]), async (req, res) => {
   try {
     const memberId = req.member._id;
@@ -31,7 +31,7 @@ router.post('/', auth, upload.fields([{ name: 'registrationDocument', maxCount: 
       return res.status(404).json({ success: false, data: null, error: 'Member not found or inactive', message: 'Member not found or inactive' });
     }
 
-    const { pedigree, ...horseData } = req.body;
+    const { pedigree, DNA_CASE, DNA_TEST_DATE, breedingDate, markings, ...horseData } = req.body;
 
     // Check if files were uploaded
     let registrationDocumentPath;
@@ -43,10 +43,19 @@ router.post('/', auth, upload.fields([{ name: 'registrationDocument', maxCount: 
       dnaKitDocumentPath = req.files['dnaKitDocument'][0].path; // Store file path
     }
 
+    // Combine the first name and last name of the member to create ownerName
+    const ownerName = `${member.firstName} ${member.lastName}`;
+
     const newHorse = await Horse.create({
       ...horseData,
+      ownerName, // Set ownerName to the combined first name and last name
       owner: memberId,
       pedigree,
+      DNA,
+      DNA_CASE,
+      DNA_TEST_DATE,
+      breedingDate,
+      markings,
       registrationDocument: registrationDocumentPath, // Save file path
       dnaKitDocument: dnaKitDocumentPath // Save file path
     });
@@ -59,9 +68,6 @@ router.post('/', auth, upload.fields([{ name: 'registrationDocument', maxCount: 
     res.status(500).json({ success: false, data: null, error: error.message, message: 'Internal Server Error' });
   }
 });
-
-
-
 
 router.get('/', async (req, res) => {
   try {
@@ -179,7 +185,12 @@ router.put('/:id', auth, async (req, res) => {
     if (updatedFields.name) {
       // If yes, update the pending changes
       await Horse.findByIdAndUpdate(horseId, { $set: { 'pendingChanges.name': updatedFields.name } });
-      return res.status(200).json({ success: true, message: 'Horse name change request submitted successfully' });
+    }
+
+    // Check if any of the new fields (DNA_CASE, DNA_TEST_DATE, breedingDate, markings) are being updated
+    if (updatedFields.DNA_CASE || updatedFields.DNA_TEST_DATE || updatedFields.breedingDate || updatedFields.markings) {
+      const updatedHorse = await Horse.findByIdAndUpdate(horseId, updatedFields, { new: true });
+      return res.status(200).json({ success: true, data: updatedHorse, message: 'Horse updated successfully' });
     }
 
     // If other fields are being updated, apply the changes directly

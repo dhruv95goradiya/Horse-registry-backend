@@ -1,5 +1,6 @@
 //admin.js - routes
 import express from 'express';
+import multer from 'multer';
 import Admin from '../models/admin.js';
 import adminAuth from '../middleware/adminAuth.js';
 import Member from '../models/member.js';
@@ -7,6 +8,21 @@ import Horse from '../models/horse.js';
 import OwnerChangeRequest from "../models/OwnerChangeRequestSchema.js";
 
 const router = express.Router();
+
+// Multer storage configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Set destination folder for file uploads
+    cb(null, 'uploads/'); // Change 'uploads/' to the desired directory
+  },
+  filename: (req, file, cb) => {
+    // Set filename to original name
+    cb(null, file.originalname);
+  }
+});
+
+// Initialize multer with storage configuration
+const upload = multer({ storage });
 
 // Admin registration route
 router.post('/register', async (req, res) => {
@@ -138,7 +154,7 @@ router.get('/members/:memberId/horses', adminAuth, async (req, res) => {
 
 
 // Admin-only route to create a horse and associate it with a member
-router.post('/horses', adminAuth, async (req, res) => {
+router.post('/horses', adminAuth, upload.fields([{ name: 'registrationDocument', maxCount: 1 }, { name: 'dnaKitDocument', maxCount: 1 }]), async (req, res) => {
   try {
     // Extract horse details from the request body
     const {
@@ -146,16 +162,17 @@ router.post('/horses', adminAuth, async (req, res) => {
       registrationNum,
       name,
       sex,
-      joint,
       color,
       foalDate,
-      ownerName,
       bredBy,
-      buyDate,
       soldDate,
       death,
-      distance,
-      pts
+      DNA,
+      DNA_CASE,
+      DNA_TEST_DATE,
+      verified,
+      pedigree,
+      markings // Include the new fields
     } = req.body;
 
     // Find the member to associate the horse with
@@ -165,21 +182,38 @@ router.post('/horses', adminAuth, async (req, res) => {
       return res.status(404).json({ success: false, data: null, error: 'Member not found', message: 'Member not found' });
     }
 
+    // Check if files were uploaded
+    let registrationDocumentPath;
+    let dnaKitDocumentPath;
+    if (req.files['registrationDocument'] && req.files['registrationDocument'][0]) {
+      registrationDocumentPath = req.files['registrationDocument'][0].path; // Store file path
+    }
+    if (req.files['dnaKitDocument'] && req.files['dnaKitDocument'][0]) {
+      dnaKitDocumentPath = req.files['dnaKitDocument'][0].path; // Store file path
+    }
+
+    // Combine the first name and last name of the member to create ownerName
+    const ownerName = `${member.firstName} ${member.lastName}`;
+
     // Create a new horse and associate it with the member
     const newHorse = await Horse.create({
       registrationNum,
       name,
       sex,
-      joint,
       color,
       foalDate,
-      ownerName,
+      ownerName, // Set ownerName to the combined first name and last name
       bredBy,
-      buyDate,
       soldDate,
       death,
-      distance,
-      pts,
+      DNA,
+      DNA_CASE,
+      DNA_TEST_DATE,
+      markings,
+      verified,
+      pedigree,
+      registrationDocument: registrationDocumentPath, // Save file path
+      dnaKitDocument: dnaKitDocumentPath, // Save file path
       owner: member._id, // Assigning the member ID to the horse owner
     });
 
