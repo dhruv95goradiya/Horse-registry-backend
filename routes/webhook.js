@@ -4,12 +4,20 @@ import express from 'express';
 const router = express.Router();
 
 // Route to handle webhook requests
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     console.log('Received webhook payload:', req.body);
     // Extract data from the webhook payload
     const { MessageType, Parameters } = req.body;
     const { Action, 'Contact.Id': contactId, 'Membership.LevelId': levelId, 'Membership.Status': status } = Parameters;
+
+    //----------------------------------------------------------------------------------------------------------------------//
+    // Type :- Membership
+    // Parameters:- Action: [Enabled | Disabled | StatusChanged | RenewalDateChanged | LevelChanged ],
+    // Contact.Id,
+    // Membership.LevelId,
+    // Membership.Status :[1 = Active, 2 = Lapsed, 3 = PendingRenewal, 20 = PendingNew, 30 = PendingUpgrade]
+    //-----------------------------------------------------------------------------------------------------------------------//
 
     // Process the webhook payload based on the MessageType and Action
     if (MessageType === 'Membership') {
@@ -21,7 +29,7 @@ router.post('/', (req, res) => {
           handleMembershipDisabled(contactId, levelId, status);
           break;
         case 'StatusChanged':
-          handleMembershipStatusChanged(contactId, levelId, status);
+          await handleMembershipStatusChanged(contactId, levelId, status);
           break;
         case 'RenewalDateChanged':
           handleRenewalDateChanged(contactId, levelId, status);
@@ -74,10 +82,39 @@ async function handleMembershipEnabled(accountId, contactId, membershipStatus) {
   }
 }
 
-function handleMembershipStatusChanged(contactId, levelId, status) {
-  // logic to handle membership status change
-  console.log(`Membership status changed for contact ${contactId}: LevelId - ${levelId}, Status - ${status}`);
+// Function to handle membership status changed
+async function handleMembershipStatusChanged(contactId, levelId, status) {
+  try {
+    // Fetch contact details from the third-party service
+    const contactDetails = await fetchContactDetails(contactId); // Implement this method to fetch contact details
+
+    // Check if the member already exists in the database
+    let existingMember = await Member.findById(contactId);
+
+    if (!existingMember) {
+      // Member does not exist, insert into the database
+      const newMemberData = {
+        _id: contactId, // Set contactId (of wild apricot) as the _id in registry data.
+        // Populate other member details from the contactDetails
+        firstName: contactDetails.FirstName,
+        lastName: contactDetails.LastName,
+        email: contactDetails.Email,
+        mobile: contactDetails.Phone, // Assuming Phone field contains mobile number
+        isActive: status === 1 ? true : false // Set isActive based on Membership Status
+      };
+
+      const newMember = new Member(newMemberData);
+      await newMember.save();
+      console.log(`New member added to registry: ${newMember}`);
+    } else {
+      console.log('Member already exists in the registry:', existingMember);
+    }
+  } catch (error) {
+    console.error(`Error handling membership status change for contact ${contactId}: ${error.message}`);
+    throw error;
+  }
 }
+
 
 function handleRenewalDateChanged(contactId, levelId, status) {
   // logic to handle renewal date change
